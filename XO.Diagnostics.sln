@@ -17,6 +17,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		version.json = version.json
 	EndProjectSection
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "XO.Diagnostics.Bugsnag.OpenTelemetry", "XO.Diagnostics.Bugsnag.OpenTelemetry\XO.Diagnostics.Bugsnag.OpenTelemetry.csproj", "{3BA3690E-C417-40C1-A4FA-A60FF4B2D884}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,10 @@ Global
 		{4B2A9575-0236-414D-9A7D-368A1459C9CA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4B2A9575-0236-414D-9A7D-368A1459C9CA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4B2A9575-0236-414D-9A7D-368A1459C9CA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3BA3690E-C417-40C1-A4FA-A60FF4B2D884}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3BA3690E-C417-40C1-A4FA-A60FF4B2D884}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3BA3690E-C417-40C1-A4FA-A60FF4B2D884}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3BA3690E-C417-40C1-A4FA-A60FF4B2D884}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

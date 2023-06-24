@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OpenTelemetry" Version="1.5.0" />
+    <PackageReference Include="OpenTelemetry.SemanticConventions" Version="1.0.0-rc9.9" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\XO.Diagnostics.Bugsnag\XO.Diagnostics.Bugsnag.csproj" />
+  </ItemGroup>
+
+</Project>
