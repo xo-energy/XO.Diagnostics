@@ -122,18 +122,19 @@ public sealed class NotifyEventDevice : SessionDevice
 
 public sealed class NotifyEventSession
 {
-    public NotifyEventSession(string id, DateTimeOffset startedAt)
+    public NotifyEventSession(string id, DateTimeOffset startedAt, NotifyEventSessionEvents? events = null)
     {
         Id = id;
         StartedAt = startedAt;
+        Events = events ?? new();
     }
 
     public string Id { get; set; }
     public DateTimeOffset StartedAt { get; set; }
-    public NotifySessionEvents? Events { get; }
+    public NotifyEventSessionEvents Events { get; }
 }
 
-public sealed class NotifySessionEvents
+public sealed class NotifyEventSessionEvents
 {
     public int Handled { get; set; }
     public int Unhandled { get; set; }

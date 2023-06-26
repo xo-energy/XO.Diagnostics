@@ -22,7 +22,7 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
     private string[]? _projectNamespacePrefixes;
     private NotifyEvent? _notifyEventTemplate;
     private NotifyRequest? _notifyRequest;
-    private List<Session>? _sessions;
+    private Dictionary<string, SessionTracker>? _sessions;
     private SessionsRequest? _sessionsRequest;
 
     public BugsnagExporter(BugsnagClient client, IOptions<BugsnagExporterOptions> optionsAccessor)
@@ -50,47 +50,46 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
         _notifyEventTemplate.App!.Duration = (int)(now - _appStartTime).TotalMilliseconds;
         _notifyEventTemplate.Device!.Time = now;
         _notifyRequest ??= new(_client.Notifier);
-        _sessions ??= new List<Session>();
+        _sessions ??= new Dictionary<string, SessionTracker>();
         _sessionsRequest ??= new(_client.Notifier)
         {
             App = _notifyEventTemplate.App,
             Device = _notifyEventTemplate.Device,
-            Sessions = _sessions,
+            Sessions = new(),
         };
 
         try
         {
             foreach (var activity in batch)
             {
-                Session? session = null;
-
                 var root = activity;
                 while (root.Parent is not null)
                     root = root.Parent;
 
-                var captureSession = activity.Parent is null || activity.HasRemoteParent;
-                var status = activity.GetStatus();
-
-                if (captureSession)
+                if (!_sessions.TryGetValue(activity.RootId!, out var sessionTracker))
                 {
-                    session = new Session(root.Id!)
+                    var session = new Session(activity.RootId!)
                     {
                         StartedAt = new DateTimeOffset(root.StartTimeUtc, TimeSpan.Zero),
                     };
 
-                    _sessions.Add(session);
+                    var notifyEventSession = new NotifyEventSession(session.Id, session.StartedAt);
+
+                    sessionTracker = new(session, notifyEventSession);
+                    _sessions.Add(session.Id, sessionTracker);
+                    _sessionsRequest.Sessions!.Add(session);
                 }
 
                 var notifyEvent = _notifyEventTemplate.Clone();
 
                 notifyEvent.Context = activity.DisplayName;
-                notifyEvent.Session = new(root.Id!, new DateTimeOffset(root.StartTimeUtc, TimeSpan.Zero));
+                notifyEvent.Session = sessionTracker.NotifyEventSession;
 
-                // mark the event as unhandled if it is the session root
-                notifyEvent.Unhandled = captureSession;
+                // mark the event as unhandled if the exception is logged on the local root activity
+                notifyEvent.Unhandled = activity.Parent is null || activity.HasRemoteParent;
 
                 // translate data from baggage and tags
-                TranslateTraceData(activity, notifyEvent, session);
+                TranslateTraceData(activity, notifyEvent, sessionTracker.Session);
 
                 // translate events to exceptions and breadcrumbs
                 foreach (var activityEvent in activity.EnumerateEvents())
@@ -103,10 +102,18 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
 
                 // at least one exception is required
                 if (notifyEvent.Exceptions.Count > 0)
+                {
                     _notifyRequest.Events.Add(notifyEvent);
+
+                    // increment the session counts
+                    if (notifyEvent.Unhandled)
+                        sessionTracker.NotifyEventSession.Events.Unhandled++;
+                    else
+                        sessionTracker.NotifyEventSession.Events.Handled++;
+                }
             }
 
-            if (_sessions.Count > 0)
+            if (_sessionsRequest.Sessions!.Count > 0)
                 _client.PostSessionsAsync(_sessionsRequest).GetAwaiter().GetResult();
 
             if (_notifyRequest.Events.Count > 0)
@@ -122,6 +129,7 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
         {
             _notifyRequest.Events.Clear();
             _sessions.Clear();
+            _sessionsRequest.Sessions?.Clear();
         }
     }
 
@@ -333,6 +341,9 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
             }
         }
 
+        // bugsnag's defaults use lower case for release stage
+        app.ReleaseStage = app.ReleaseStage?.ToLowerInvariant();
+
         return app;
     }
 
@@ -413,4 +424,16 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
     private static Regex GetStacktraceRegex()
         => new Regex(StacktraceRegexPattern, RegexOptions.Compiled | RegexOptions.ExplicitCapture | RegexOptions.Multiline);
 #endif
+
+    private readonly struct SessionTracker
+    {
+        public readonly Session Session;
+        public readonly NotifyEventSession NotifyEventSession;
+
+        public SessionTracker(Session session, NotifyEventSession notifyEventSession)
+        {
+            Session = session;
+            NotifyEventSession = notifyEventSession;
+        }
+    }
 }
