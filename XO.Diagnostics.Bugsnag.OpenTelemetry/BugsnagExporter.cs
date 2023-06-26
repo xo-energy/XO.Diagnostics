@@ -273,53 +273,56 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
 
         var notifyEventException = new NotifyEventException(errorClass, message, type: BugsnagStacktraceType.csharp);
 
-        if (!String.IsNullOrWhiteSpace(stackTrace))
+        if (!String.IsNullOrWhiteSpace(stacktrace))
+            AddNotifyEventExceptionStacktrace(notifyEventException, activityEvent, stacktrace);
+
+        notifyEvent.Exceptions.Add(notifyEventException);
+    }
+
+    private void AddNotifyEventExceptionStacktrace(NotifyEventException notifyEventException, ActivityEvent activityEvent, string stacktrace)
+    {
+        var stacktraceLines = stacktrace.Split(StacktraceSeparators, StringSplitOptions.RemoveEmptyEntries);
+        int i;
+
+        // if the message was missing from tags, populate it from the first line of the stacktrace
+        notifyEventException.Message ??= stacktraceLines[0].Split(": ", 2).Last();
+
+        // starting from the second line, add additional detail from wrapped exceptions to the message
+        for (i = 1; i < stacktraceLines.Length; i++)
         {
-            var stacktraceLines = stackTrace.Split(StacktraceSeparators, StringSplitOptions.RemoveEmptyEntries);
-            int i;
-
-            // if the message was missing from tags, populate it from the first line of the stacktrace
-            message ??= stacktraceLines[0].Split(": ", 2).Last();
-
-            // starting from the second line, add additional detail from wrapped exceptions to the message
-            for (i = 1; i < stacktraceLines.Length; i++)
+            var stacktraceLine = stacktraceLines[i];
+            if (stacktraceLine.StartsWith(" ---> "))
             {
-                var stacktraceLine = stacktraceLines[i];
-                if (stacktraceLine.StartsWith(" ---> "))
-                {
-                    message += "\n" + stacktraceLine;
-                }
-                else
-                {
-                    break;
-                }
+                notifyEventException.Message += "\n" + stacktraceLine;
             }
-
-            notifyEventException.Stacktrace.EnsureCapacity(stacktraceLines.Length - i);
-
-            // try to match remaining lines as stack frames
-            for (; i < stacktraceLines.Length; i++)
+            else
             {
-                if (StacktraceRegex.Match(stacktraceLines[i]) is not { Success: true } match)
-                    continue;
-
-                var method = match.Groups["method"];
-                var file = match.Groups["file"];
-                var line = match.Groups["line"];
-
-                var stacktraceLine = new NotifyEventStacktrace(
-                    file.Value,
-                    line.Success ? int.Parse(line.Value) : 0,
-                    method.Value);
-
-                if (IsInProject(activityEvent, file.Value, method.Value))
-                    stacktraceLine.InProject = true;
-
-                notifyEventException.Stacktrace.Add(stacktraceLine);
+                break;
             }
         }
 
-        notifyEvent.Exceptions.Add(notifyEventException);
+        notifyEventException.Stacktrace.EnsureCapacity(stacktraceLines.Length - i);
+
+        // try to match remaining lines as stack frames
+        for (; i < stacktraceLines.Length; i++)
+        {
+            if (StacktraceRegex.Match(stacktraceLines[i]) is not { Success: true } match)
+                continue;
+
+            var method = match.Groups["method"];
+            var file = match.Groups["file"];
+            var line = match.Groups["line"];
+
+            var stacktraceLine = new NotifyEventStacktrace(
+                file.Value,
+                line.Success ? int.Parse(line.Value) : 0,
+                method.Value);
+
+            if (IsInProject(activityEvent, file.Value, method.Value))
+                stacktraceLine.InProject = true;
+
+            notifyEventException.Stacktrace.Add(stacktraceLine);
+        }
     }
 
     private NotifyEvent CreateEventTemplate()
