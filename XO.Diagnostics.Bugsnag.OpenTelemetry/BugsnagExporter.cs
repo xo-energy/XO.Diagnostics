@@ -275,12 +275,34 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
 
         if (!String.IsNullOrWhiteSpace(stackTrace))
         {
-            var matches = StacktraceRegex.Matches(stackTrace);
+            var stacktraceLines = stackTrace.Split(StacktraceSeparators, StringSplitOptions.RemoveEmptyEntries);
+            int i;
 
-            notifyEventException.Stacktrace.EnsureCapacity(matches.Count);
+            // if the message was missing from tags, populate it from the first line of the stacktrace
+            message ??= stacktraceLines[0].Split(": ", 2).Last();
 
-            foreach (Match match in matches)
+            // starting from the second line, add additional detail from wrapped exceptions to the message
+            for (i = 1; i < stacktraceLines.Length; i++)
             {
+                var stacktraceLine = stacktraceLines[i];
+                if (stacktraceLine.StartsWith(" ---> "))
+                {
+                    message += "\n" + stacktraceLine;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            notifyEventException.Stacktrace.EnsureCapacity(stacktraceLines.Length - i);
+
+            // try to match remaining lines as stack frames
+            for (; i < stacktraceLines.Length; i++)
+            {
+                if (StacktraceRegex.Match(stacktraceLines[i]) is not { Success: true } match)
+                    continue;
+
                 var method = match.Groups["method"];
                 var file = match.Groups["file"];
                 var line = match.Groups["line"];
@@ -417,12 +439,14 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
 
     private const string StacktraceRegexPattern = @"^\s+?at (?<method>.+?)( in (?<file>.+?):line (?<line>\d+))?\s*$";
 
+    private readonly char[] StacktraceSeparators = new[] { '\r', '\n' };
+
 #if NET7_0_OR_GREATER
-    [GeneratedRegex(StacktraceRegexPattern, RegexOptions.ExplicitCapture | RegexOptions.Multiline)]
+    [GeneratedRegex(StacktraceRegexPattern, RegexOptions.ExplicitCapture)]
     private static partial Regex GetStacktraceRegex();
 #else
     private static Regex GetStacktraceRegex()
-        => new Regex(StacktraceRegexPattern, RegexOptions.Compiled | RegexOptions.ExplicitCapture | RegexOptions.Multiline);
+        => new Regex(StacktraceRegexPattern, RegexOptions.Compiled | RegexOptions.ExplicitCapture);
 #endif
 
     private readonly struct SessionTracker
