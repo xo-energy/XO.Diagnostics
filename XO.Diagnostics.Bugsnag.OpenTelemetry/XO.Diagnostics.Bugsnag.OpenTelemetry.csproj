@@ -2,6 +2,9 @@
 
   <PropertyGroup>
     <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
+    <Description>Exports OpenTelemetry traces to BugSnag</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>$(PackageTags) bugsnag opentelemetry</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,6 +19,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\XO.Diagnostics.Bugsnag\XO.Diagnostics.Bugsnag.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\LICENSE.txt" Link="LICENSE.txt" Pack="true" PackagePath="/" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 
 </Project>

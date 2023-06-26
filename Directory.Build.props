@@ -7,7 +7,7 @@
     <Copyright>Copyright (c) XO Energy LLC</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/xo-energy/XO.Diagnostics</PackageProjectUrl>
-    <PackageTags>diagnostics;opentelemetry;telemetry</PackageTags>
+    <PackageTags>diagnostics telemetry</PackageTags>
     <RepositoryUrl>https://github.com/xo-energy/XO.Diagnostics.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <RepositoryRoot>$(MSBuildThisFileDirectory)</RepositoryRoot>
