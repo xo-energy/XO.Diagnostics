@@ -244,7 +244,7 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
     {
         string? errorClass = null;
         string? message = null;
-        string? stackTrace = null;
+        string? stacktrace = null;
 
         foreach (var (key, value) in activityEvent.Tags)
         {
@@ -263,7 +263,7 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
                     message = valueString;
                     break;
                 case TraceSemanticConventions.AttributeExceptionStacktrace:
-                    stackTrace = valueString;
+                    stacktrace = valueString;
                     break;
             }
         }
@@ -424,7 +424,7 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
         return projectNamespaces.Select(x => x + ".").ToArray();
     }
 
-    private bool IsInProject(ActivityEvent activity, string file, string method)
+    private bool IsInProject(ActivityEvent activityEvent, string file, string method)
     {
         var inProject = false;
 
@@ -437,7 +437,7 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
             }
         }
 
-        return _options.InProjectCallback(activity, file, method, inProject);
+        return _options.InProjectCallback(activityEvent, file, method, inProject);
     }
 
     private const string StacktraceRegexPattern = @"^\s+?at (?<method>.+?)( in (?<file>.+?):line (?<line>\d+))?\s*$";

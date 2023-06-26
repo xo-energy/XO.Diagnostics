@@ -3,7 +3,7 @@ using System.Diagnostics;
 namespace XO.Diagnostics.Bugsnag.OpenTelemetry;
 
 public delegate bool BugsnagInProjectCallback(
-    ActivityEvent activity,
+    ActivityEvent activityEvent,
     string file,
     string method,
     bool inProjectNamespace);
