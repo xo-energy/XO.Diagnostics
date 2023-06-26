@@ -13,8 +13,14 @@ public static class ServiceCollectionExtensions
             .ValidateDataAnnotations()
             ;
 
-        services.AddHttpClient<BugsnagClient>(
-            httpClient =>
+        services.AddHttpClient<BugsnagClient, BugsnagClient>(
+            (httpClient, services) =>
+            {
+                var optionsAccessor = services.GetRequiredService<IOptions<BugsnagClientOptions>>();
+
+                return new BugsnagClient(httpClient, optionsAccessor.Value);
+            })
+            .ConfigureHttpClient(httpClient =>
             {
                 httpClient.DefaultRequestHeaders.UserAgent.ParseAdd($"{ThisAssembly.AssemblyName}/{ThisAssembly.AssemblyFileVersion}");
             })

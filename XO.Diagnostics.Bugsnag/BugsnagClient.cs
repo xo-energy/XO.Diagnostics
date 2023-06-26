@@ -3,7 +3,6 @@ using System.Net.Http.Json;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
-using Microsoft.Extensions.Options;
 using XO.Diagnostics.Bugsnag.Models;
 
 namespace XO.Diagnostics.Bugsnag;
@@ -18,10 +17,10 @@ public sealed class BugsnagClient
     private readonly JsonSerializerOptions _jsonSerializerOptions;
     private readonly BugsnagNotifier _notifier;
 
-    public BugsnagClient(HttpClient httpClient, IOptions<BugsnagClientOptions> optionsAccessor)
+    public BugsnagClient(HttpClient httpClient, BugsnagClientOptions options)
     {
         _httpClient = httpClient;
-        _options = optionsAccessor.Value;
+        _options = options;
         _jsonSerializerOptions = BugsnagJsonContext.Default.Options;
         _notifier = new BugsnagNotifier(ThisAssembly.AssemblyName, ThisAssembly.AssemblyInformationalVersion);
     }
