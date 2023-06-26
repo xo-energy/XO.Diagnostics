@@ -8,15 +8,22 @@ public static class TraceProviderBuilderExtensions
 {
     public static TracerProviderBuilder AddBugsnagExporter(this TracerProviderBuilder builder)
     {
-        builder.ConfigureServices(services => services.AddBugsnagClient());
+        return builder
+            .ConfigureServices(services =>
+            {
+                services.AddOptions<BugsnagExporterOptions>()
+                    .BindConfiguration(BugsnagExporterOptions.Section)
+                    .ValidateDataAnnotations()
+                    ;
 
-        builder.AddProcessor(services =>
-        {
-            var exporter = ActivatorUtilities.CreateInstance<BugsnagExporter>(services);
+                services.AddBugsnagClient();
+            })
+            .AddProcessor(services =>
+            {
+                var exporter = ActivatorUtilities.CreateInstance<BugsnagExporter>(services);
 
-            return new BatchActivityExportProcessor(exporter);
-        });
-
-        return builder;
+                return new BatchActivityExportProcessor(exporter);
+            })
+            ;
     }
 }

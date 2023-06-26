@@ -1,8 +1,8 @@
 using System.Diagnostics;
-using System.Net;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using OpenTelemetry;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -15,18 +15,24 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
     private static readonly Regex StacktraceRegex = GetStacktraceRegex();
 
     private readonly BugsnagClient _client;
+    private readonly BugsnagExporterOptions _options;
+    private readonly IHostEnvironment? _environment;
     private readonly DateTimeOffset _appStartTime;
 
-    private BugsnagNotifier? _notifier;
-    private NotifyEventDevice? _device;
-    private NotifyEventApp? _app;
-
+    private string[]? _projectNamespacePrefixes;
+    private NotifyEvent? _notifyEventTemplate;
     private NotifyRequest? _notifyRequest;
+    private List<Session>? _sessions;
     private SessionsRequest? _sessionsRequest;
 
-    public BugsnagExporter(BugsnagClient client)
+    public BugsnagExporter(BugsnagClient client, IOptions<BugsnagExporterOptions> optionsAccessor)
+        : this(client, optionsAccessor, null) { }
+
+    public BugsnagExporter(BugsnagClient client, IOptions<BugsnagExporterOptions> optionsAccessor, IHostEnvironment? environment)
     {
         _client = client;
+        _options = optionsAccessor.Value;
+        _environment = environment;
 
         using (var process = Process.GetCurrentProcess())
             _appStartTime = process.StartTime.ToUniversalTime();
@@ -38,19 +44,18 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
 
         var now = DateTimeOffset.Now;
 
-        // initialize static information
-        _app ??= GetApp();
-        _app.Duration = (int)(now - _appStartTime).TotalMilliseconds;
-        _device ??= GetDevice();
-        _device.Time = now;
-        _notifier ??= GetNotifier();
-
         // initialize the requests
-        _notifyRequest ??= new(_notifier);
-        _sessionsRequest ??= new(_notifier)
+        _projectNamespacePrefixes ??= DetectProjectNamespaces();
+        _notifyEventTemplate ??= CreateEventTemplate();
+        _notifyEventTemplate.App!.Duration = (int)(now - _appStartTime).TotalMilliseconds;
+        _notifyEventTemplate.Device!.Time = now;
+        _notifyRequest ??= new(_client.Notifier);
+        _sessions ??= new List<Session>();
+        _sessionsRequest ??= new(_client.Notifier)
         {
-            App = _app,
-            Device = _device,
+            App = _notifyEventTemplate.App,
+            Device = _notifyEventTemplate.Device,
+            Sessions = _sessions,
         };
 
         try
@@ -73,16 +78,13 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
                         StartedAt = new DateTimeOffset(root.StartTimeUtc, TimeSpan.Zero),
                     };
 
-                    _sessionsRequest.Sessions.Add(session);
+                    _sessions.Add(session);
                 }
 
-                var notifyEvent = new NotifyEvent()
-                {
-                    App = _app,
-                    Context = activity.DisplayName,
-                    Device = _device,
-                    Session = new(root.Id!, new DateTimeOffset(root.StartTimeUtc, TimeSpan.Zero)),
-                };
+                var notifyEvent = _notifyEventTemplate.Clone();
+
+                notifyEvent.Context = activity.DisplayName;
+                notifyEvent.Session = new(root.Id!, new DateTimeOffset(root.StartTimeUtc, TimeSpan.Zero));
 
                 // mark the event as unhandled if it is the session root
                 notifyEvent.Unhandled = captureSession;
@@ -104,11 +106,11 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
                     _notifyRequest.Events.Add(notifyEvent);
             }
 
-            if (_sessionsRequest.Sessions.Count > 0)
-                _client.CreateSessionsAsync(_sessionsRequest).GetAwaiter().GetResult();
+            if (_sessions.Count > 0)
+                _client.PostSessionsAsync(_sessionsRequest).GetAwaiter().GetResult();
 
             if (_notifyRequest.Events.Count > 0)
-                _client.NotifyAsync(_notifyRequest).GetAwaiter().GetResult();
+                _client.PostEventsAsync(_notifyRequest).GetAwaiter().GetResult();
 
             return ExportResult.Success;
         }
@@ -119,8 +121,7 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
         finally
         {
             _notifyRequest.Events.Clear();
-            _sessionsRequest.Sessions.Clear();
-            _sessionsRequest.SessionCounts.Clear();
+            _sessions.Clear();
         }
     }
 
@@ -281,7 +282,8 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
                     line.Success ? int.Parse(line.Value) : 0,
                     method.Value);
 
-                stacktraceLine.InProject = file.Success;
+                if (IsInProject(activityEvent, file.Value, method.Value))
+                    stacktraceLine.InProject = true;
 
                 notifyEventException.Stacktrace.Add(stacktraceLine);
             }
@@ -290,12 +292,28 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
         notifyEvent.Exceptions.Add(notifyEventException);
     }
 
-    private NotifyEventApp GetApp()
+    private NotifyEvent CreateEventTemplate()
     {
-        var app = new NotifyEventApp();
+        var @event = new NotifyEvent()
+        {
+            App = DetectAppFromResource(),
+            Device = DetectDeviceFromResource(),
+        };
+
+        return @event;
+    }
+
+    private NotifyEventApp DetectAppFromResource()
+    {
+        var app = _client.CreateDefaultApp();
+
+        // use hosting environment as release stage if not explicitly set
+        app.ReleaseStage ??= _environment?.EnvironmentName;
+
         var resource = this.ParentProvider?.GetResource()
             ?? ResourceBuilder.CreateDefault().Build();
 
+        // use configured resource as authoritative to align with telemetry exported to other providers
         foreach (var (key, value) in resource.Attributes)
         {
             if (value is not string valueString)
@@ -303,6 +321,9 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
 
             switch (key)
             {
+                case ResourceSemanticConventions.AttributeDeploymentEnvironment:
+                    app.ReleaseStage = valueString;
+                    break;
                 case ResourceSemanticConventions.AttributeServiceName:
                     app.Id = valueString;
                     break;
@@ -312,46 +333,17 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
             }
         }
 
-        var entryAssembly = Assembly.GetEntryAssembly();
-
-        if (String.IsNullOrWhiteSpace(app.Id))
-            app.Id = entryAssembly?.GetName().Name ?? String.Empty;
-
-        if (String.IsNullOrWhiteSpace(app.Version)
-            && entryAssembly?.GetCustomAttribute<AssemblyInformationalVersionAttribute>() is { } versionAttribute)
-            app.Version = versionAttribute.InformationalVersion;
-
-        app.BinaryArch = RuntimeInformation.ProcessArchitecture switch
-        {
-            Architecture.X86 => BugsnagBinaryArch.x86,
-            Architecture.X64 => BugsnagBinaryArch.amd64,
-            Architecture.Arm => BugsnagBinaryArch.arm32,
-            Architecture.Arm64 => BugsnagBinaryArch.arm64,
-#if NET7_0_OR_GREATER
-            Architecture.Armv6 => BugsnagBinaryArch.armv6,
-#endif
-            _ => null,
-        };
-
         return app;
     }
 
-    private NotifyEventDevice GetDevice()
+    private NotifyEventDevice DetectDeviceFromResource()
     {
+        var device = _client.CreateDefaultDevice();
+
         var resource = this.ParentProvider?.GetResource()
             ?? ResourceBuilder.CreateDefault().Build();
 
-        var device = new NotifyEventDevice()
-        {
-            Hostname = Dns.GetHostEntry("localhost").HostName,
-            OsName = RuntimeInformation.RuntimeIdentifier,
-            OsVersion = Environment.OSVersion.Version.ToString(),
-            RuntimeVersions = new()
-            {
-                [BugsnagRuntimeName.dotnet] = Environment.Version.ToString(),
-            },
-        };
-
+        // use configured resource as authoritative to align with telemetry exported to other providers
         foreach (var (key, value) in resource.Attributes)
         {
             if (value is not string valueString)
@@ -383,21 +375,33 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
         return device;
     }
 
-    private BugsnagNotifier GetNotifier()
+    private string[] DetectProjectNamespaces()
     {
-        var resource = this.ParentProvider?.GetResource()
-            ?? ResourceBuilder.CreateDefault().Build();
+        var projectNamespaces = _options.ProjectNamespaces;
 
-        var versionAttribute = resource.Attributes.FirstOrDefault(
-            x => x.Key == ResourceSemanticConventions.AttributeTelemetrySdkVersion);
+        if (projectNamespaces is null && Assembly.GetEntryAssembly()?.GetName()?.Name is string entryAssemblyName)
+            projectNamespaces = new[] { entryAssemblyName };
 
-        return new BugsnagNotifier(
-            ThisAssembly.AssemblyName,
-            ThisAssembly.AssemblyInformationalVersion,
-            dependencies: new[] {
-                _client.Notifier,
-                new BugsnagNotifier("OpenTelemetry", versionAttribute.Value as string ?? String.Empty),
-            });
+        if (projectNamespaces is null)
+            projectNamespaces = Array.Empty<string>();
+
+        return projectNamespaces.Select(x => x + ".").ToArray();
+    }
+
+    private bool IsInProject(ActivityEvent activity, string file, string method)
+    {
+        var inProject = false;
+
+        for (int i = 0; i < _projectNamespacePrefixes!.Length; ++i)
+        {
+            if (method.StartsWith(_projectNamespacePrefixes[i]))
+            {
+                inProject = true;
+                break;
+            }
+        }
+
+        return _options.InProjectCallback(activity, file, method, inProject);
     }
 
     private const string StacktraceRegexPattern = @"^\s+?at (?<method>.+?)( in (?<file>.+?):line (?<line>\d+))?\s*$";

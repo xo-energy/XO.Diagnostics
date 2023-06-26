@@ -25,15 +25,11 @@ public sealed class NotifyEvent
     public NotifyEvent(
         List<NotifyEventException> exceptions,
         List<NotifyEventBreadcrumb>? breadcrumbs = null,
-        List<NotifyEventThread>? threads = null,
-        List<string>? projectPackages = null,
-        List<NotifyEventFeatureFlag>? featureFlags = null)
+        List<NotifyEventThread>? threads = null)
     {
         Exceptions = exceptions;
         Breadcrumbs = breadcrumbs ?? new(0);
         Threads = threads ?? new(0);
-        ProjectPackages = projectPackages ?? new(0);
-        FeatureFlags = featureFlags ?? new(0);
     }
 
     public List<NotifyEventException> Exceptions { get; set; }
@@ -50,8 +46,20 @@ public sealed class NotifyEvent
     public NotifyEventApp? App { get; set; }
     public NotifyEventDevice? Device { get; set; }
     public NotifyEventSession? Session { get; set; }
-    public List<NotifyEventFeatureFlag> FeatureFlags { get; set; }
+    public List<NotifyEventFeatureFlag>? FeatureFlags { get; set; }
     public Dictionary<string, JsonObject>? MetaData { get; set; }
+
+    /// <summary>
+    /// Creates a shallow copy of the current object.
+    /// </summary>
+    /// <returns>
+    /// A new instance of <see cref="NotifyEvent"/> with the same property values as the current instance.
+    /// Reference-typed property values are shared between the two instances.
+    /// </returns>
+    public NotifyEvent Clone()
+    {
+        return (NotifyEvent)this.MemberwiseClone();
+    }
 }
 
 public sealed class NotifyEventRequest
@@ -91,12 +99,12 @@ public sealed class NotifyEventApp : SessionApp
     public string? Id { get; set; }
     public string? BuildUUID { get; set; }
     public string[]? DsymUUIDs { get; set; }
-    public int Duration { get; set; }
-    public int DurationInForeground { get; set; }
-    public bool InForeground { get; set; }
-    public bool IsLaunching { get; set; }
+    public int? Duration { get; set; }
+    public int? DurationInForeground { get; set; }
+    public bool? InForeground { get; set; }
+    public bool? IsLaunching { get; set; }
     public BugsnagBinaryArch? BinaryArch { get; set; }
-    public bool RunningOnRosetta { get; set; }
+    public bool? RunningOnRosetta { get; set; }
 }
 
 public sealed class NotifyEventDevice : SessionDevice

@@ -8,15 +8,15 @@ public sealed class SessionsRequest
         List<SessionCount>? sessionCounts = null)
     {
         this.Notifier = notifier;
-        this.Sessions = sessions ?? new(0);
-        this.SessionCounts = sessionCounts ?? new(0);
+        this.Sessions = sessions;
+        this.SessionCounts = sessionCounts;
     }
 
     public BugsnagNotifier Notifier { get; set; }
     public SessionApp? App { get; set; }
     public SessionDevice? Device { get; set; }
-    public List<Session> Sessions { get; set; }
-    public List<SessionCount> SessionCounts { get; set; }
+    public List<Session>? Sessions { get; set; }
+    public List<SessionCount>? SessionCounts { get; set; }
 }
 
 public class SessionApp
