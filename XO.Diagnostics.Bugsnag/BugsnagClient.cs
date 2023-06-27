@@ -129,7 +129,7 @@ public sealed class BugsnagClient
 
     public async Task<Guid> PostEventsAsync(NotifyRequest request, CancellationToken cancellationToken = default)
     {
-        using var message = CreateRequest(_options.Endpoints.Notify, request, payloadVersion: "5");
+        using var message = CreateRequest(_options.Endpoints.Notify, request, payloadVersion: request.PayloadVersion);
 
         using var response = await _httpClient.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             .ConfigureAwait(false);
@@ -143,7 +143,7 @@ public sealed class BugsnagClient
 
     public async Task<Guid> PostSessionsAsync(SessionsRequest request, CancellationToken cancellationToken = default)
     {
-        using var message = CreateRequest(_options.Endpoints.Sessions, request, payloadVersion: "1.0");
+        using var message = CreateRequest(_options.Endpoints.Sessions, request, payloadVersion: SessionsRequest.BugsnagPayloadVersion);
 
         using var response = await _httpClient.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             .ConfigureAwait(false);

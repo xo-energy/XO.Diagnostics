@@ -2,6 +2,8 @@ namespace XO.Diagnostics.Bugsnag.Models;
 
 public sealed class SessionsRequest
 {
+    public const string BugsnagPayloadVersion = "1.0";
+
     public SessionsRequest(
         BugsnagNotifier notifier,
         List<Session>? sessions = null,

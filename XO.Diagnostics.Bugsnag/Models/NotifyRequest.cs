@@ -5,13 +5,15 @@ namespace XO.Diagnostics.Bugsnag.Models;
 
 public sealed class NotifyRequest
 {
+    public const string BugsnagPayloadVersion = "5";
+
     public NotifyRequest(BugsnagNotifier notifier)
     {
         Notifier = notifier;
         Events = new();
     }
 
-    public string PayloadVersion { get; } = "5";
+    public string PayloadVersion { get; } = BugsnagPayloadVersion;
     public BugsnagNotifier Notifier { get; set; }
     public List<NotifyEvent> Events { get; set; }
 }

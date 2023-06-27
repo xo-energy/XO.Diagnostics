@@ -20,7 +20,7 @@ public sealed class BuildRequest
     public bool AutoAssignRelease { get; set; }
 }
 
-public sealed class SourceControl
+public sealed class SourceControl : IEquatable<SourceControl>
 {
     public SourceControl(string repository, string revision)
     {
@@ -31,4 +31,21 @@ public sealed class SourceControl
     public string? Provider { get; set; }
     public string Repository { get; set; }
     public string Revision { get; set; }
+
+    public bool Equals(SourceControl? other)
+    {
+        return other != null
+            && other.Repository == this.Repository
+            && other.Revision == this.Revision
+            && other.Provider == this.Provider;
+    }
+
+    public override bool Equals(object? obj)
+        => Equals(obj as SourceControl);
+
+    public override int GetHashCode()
+        => HashCode.Combine(Repository, Revision);
+
+    public override string ToString()
+        => $"{Repository}@{Revision}";
 }
