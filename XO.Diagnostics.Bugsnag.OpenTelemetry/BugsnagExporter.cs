@@ -10,7 +10,7 @@ using XO.Diagnostics.Bugsnag.Models;
 
 namespace XO.Diagnostics.Bugsnag.OpenTelemetry;
 
-internal sealed partial class BugsnagExporter : BaseExporter<Activity>
+public sealed partial class BugsnagExporter : BaseExporter<Activity>
 {
     private static readonly Regex StacktraceFrameRegex = GetStacktraceFrameRegex();
     private static readonly Regex StacktraceMessageRegex = GetStacktraceMessageRegex();
@@ -404,7 +404,7 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
                         var header = key.Substring(RequestHeaderPrefix.Length).Replace('_', '-');
                         var headerValue = String.Join(", ", valueStringArray);
 
-                        request.Headers ??= new();
+                        request.Headers ??= new(StringComparer.OrdinalIgnoreCase);
                         request.Headers[header] = headerValue;
 
                         if (header.Equals("referer", StringComparison.OrdinalIgnoreCase))

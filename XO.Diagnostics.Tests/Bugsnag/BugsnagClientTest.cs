@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -9,19 +9,8 @@ using XO.Diagnostics.Bugsnag.Models;
 
 namespace XO.Diagnostics.Bugsnag;
 
-public sealed class BugsnagClientTest
+public sealed class BugsnagClientTest : BugsnagTest
 {
-    private string AppVersion { get; } = "1.2.3";
-    private SourceControl AppSourceControl { get; } = new SourceControl("https://github.com/foo/bar", "123abc");
-    private Guid BugsnagEventId { get; } = Guid.NewGuid();
-    private Guid BugsnagSessionId { get; } = Guid.NewGuid();
-
-    private BugsnagClientOptions Options { get; }
-        = new BugsnagClientOptions
-        {
-            ApiKey = Guid.NewGuid().ToString(),
-        };
-
     private StatusResponse StatusResponseError { get; }
         = new StatusResponse("error")
         {
@@ -35,20 +24,7 @@ public sealed class BugsnagClientTest
             },
         };
 
-    private async Task<IHost> StartHostAsync(Action<IApplicationBuilder>? configure = null)
-    {
-        return await new HostBuilder()
-            .ConfigureWebHost(builder =>
-            {
-                configure ??= DefaultConfigure;
-
-                builder.UseTestServer();
-                builder.Configure(configure);
-            })
-            .StartAsync();
-    }
-
-    private void DefaultConfigure(IApplicationBuilder app)
+    protected override void DefaultConfigure(IApplicationBuilder app)
     {
         app.Run(async context =>
         {

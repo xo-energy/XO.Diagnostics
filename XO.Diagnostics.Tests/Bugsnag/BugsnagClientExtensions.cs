@@ -1,4 +1,4 @@
-﻿using XO.Diagnostics.Bugsnag.Models;
+using XO.Diagnostics.Bugsnag.Models;
 
 namespace XO.Diagnostics.Bugsnag;
 
