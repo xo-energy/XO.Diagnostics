@@ -7,7 +7,6 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using OpenTelemetry;
-using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using XO.Diagnostics.Bugsnag.Models;
 using XO.Diagnostics.Bugsnag.OpenTelemetry;
