@@ -12,12 +12,15 @@ namespace XO.Diagnostics.Bugsnag.OpenTelemetry;
 
 internal sealed partial class BugsnagExporter : BaseExporter<Activity>
 {
-    private static readonly Regex StacktraceRegex = GetStacktraceRegex();
+    private static readonly Regex StacktraceFrameRegex = GetStacktraceFrameRegex();
+    private static readonly Regex StacktraceMessageRegex = GetStacktraceMessageRegex();
 
     private readonly BugsnagClient _client;
     private readonly BugsnagExporterOptions _options;
     private readonly IHostEnvironment? _environment;
     private readonly DateTimeOffset _appStartTime;
+
+    private readonly Stack<NotifyEventException> _exceptions = new();
 
     private string[]? _projectNamespacePrefixes;
     private NotifyEventApp? _notifyEventApp;
@@ -82,40 +85,51 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
                     _sessionsRequest.Sessions!.Add(session);
                 }
 
-                var notifyEvent = new NotifyEvent()
+                var activityEventEnumerator = activity.EnumerateEvents();
+
+                while (activityEventEnumerator.MoveNext())
                 {
-                    App = _notifyEventApp,
-                    Device = _notifyEventDevice
-                };
+                    var notifyEvent = new NotifyEvent()
+                    {
+                        App = _notifyEventApp,
+                        Device = _notifyEventDevice,
+                    };
 
-                notifyEvent.Context = activity.DisplayName;
-                notifyEvent.Session = sessionTracker.NotifyEventSession;
+                    notifyEvent.Context = activity.DisplayName;
+                    notifyEvent.Session = sessionTracker.NotifyEventSession;
 
-                // mark the event as unhandled if the exception is logged on the local root activity
-                notifyEvent.Unhandled = activity.Parent is null || activity.HasRemoteParent;
+                    // mark the event as unhandled if the exception is logged on the local root activity
+                    notifyEvent.Unhandled = activity.Parent is null || activity.HasRemoteParent;
 
-                // translate data from baggage and tags
-                TranslateTraceData(activity, notifyEvent, sessionTracker.Session);
+                    // translate data from baggage and tags
+                    TranslateTraceData(activity, notifyEvent, sessionTracker.Session);
 
-                // translate events to exceptions and breadcrumbs
-                foreach (var activityEvent in activity.EnumerateEvents())
-                {
-                    if (activityEvent.Name == "exception")
-                        AddNotifyEventException(notifyEvent, activityEvent);
-                    else
-                        AddNotifyEventBreadcrumb(notifyEvent, activityEvent);
-                }
+                    // translate events to exceptions and breadcrumbs
+                    do
+                    {
+                        var activityEvent = activityEventEnumerator.Current;
+                        if (activityEvent.Name == "exception")
+                        {
+                            AddNotifyEventException(notifyEvent, activityEvent);
 
-                // at least one exception is required
-                if (notifyEvent.Exceptions.Count > 0)
-                {
-                    _notifyRequest.Events.Add(notifyEvent);
+                            // multiple exceptions on the same activity are NOT necessarily related; report a separate event for each
+                            _notifyRequest.Events.Add(notifyEvent);
 
-                    // increment the session counts
-                    if (notifyEvent.Unhandled)
-                        sessionTracker.NotifyEventSession.Events.Unhandled++;
-                    else
-                        sessionTracker.NotifyEventSession.Events.Handled++;
+                            // increment the session counts
+                            if (notifyEvent.Unhandled)
+                                sessionTracker.NotifyEventSession.Events.Unhandled++;
+                            else
+                                sessionTracker.NotifyEventSession.Events.Handled++;
+
+                            // start the next event
+                            break;
+                        }
+                        else
+                        {
+                            AddNotifyEventBreadcrumb(notifyEvent, activityEvent);
+                        }
+                    }
+                    while (activityEventEnumerator.MoveNext());
                 }
             }
 
@@ -133,6 +147,7 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
         }
         finally
         {
+            _exceptions.Clear();
             _notifyRequest.Events.Clear();
             _sessions.Clear();
             _sessionsRequest.Sessions?.Clear();
@@ -274,61 +289,100 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
             }
         }
 
-        if (String.IsNullOrWhiteSpace(errorClass))
-            errorClass = nameof(Exception);
-
-        var notifyEventException = new NotifyEventException(errorClass, message, type: BugsnagStacktraceType.csharp);
-
-        if (!String.IsNullOrWhiteSpace(stacktrace))
-            AddNotifyEventExceptionStacktrace(notifyEventException, activityEvent, stacktrace);
-
-        notifyEvent.Exceptions.Add(notifyEventException);
+        AddNotifyEventExceptionStacktrace(notifyEvent, activityEvent, errorClass, message, stacktrace);
     }
 
-    private void AddNotifyEventExceptionStacktrace(NotifyEventException notifyEventException, ActivityEvent activityEvent, string stacktrace)
+    private void AddNotifyEventExceptionStacktrace(NotifyEvent notifyEvent, ActivityEvent activityEvent, string? errorClass, string? message, string? stacktrace)
     {
-        var stacktraceLines = stacktrace.Split(StacktraceSeparators, StringSplitOptions.RemoveEmptyEntries);
+        var stacktraceLines = stacktrace?.Split(StacktraceSeparators, StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
+        var frames = false;
         int i;
 
-        // if the message was missing from tags, populate it from the first line of the stacktrace
-        notifyEventException.Message ??= stacktraceLines[0].Split(": ", 2).Last();
+        var notifyEventException = new NotifyEventException(
+            errorClass ?? nameof(Exception),
+            message,
+            type: BugsnagStacktraceType.csharp);
 
-        // starting from the second line, add additional detail from wrapped exceptions to the message
-        for (i = 1; i < stacktraceLines.Length; i++)
+        // if there is no stacktrace, create an exception from the error class and message parsed from tags
+        if (stacktraceLines.Length == 0)
         {
-            var stacktraceLine = stacktraceLines[i];
-            if (stacktraceLine.StartsWith(" ---> "))
-            {
-                notifyEventException.Message += "\n" + stacktraceLine;
-            }
-            else
-            {
-                break;
-            }
+            notifyEvent.Exceptions.Add(notifyEventException);
+            return;
         }
 
-        notifyEventException.Stacktrace.EnsureCapacity(stacktraceLines.Length - i);
-
-        // try to match remaining lines as stack frames
-        for (; i < stacktraceLines.Length; i++)
+        for (i = 0; i < stacktraceLines.Length; i++)
         {
-            if (StacktraceRegex.Match(stacktraceLines[i]) is not { Success: true } match)
+            if (!frames)
+            {
+                var match = StacktraceMessageRegex.Match(stacktraceLines[i]);
+                if (match.Success && stacktraceLines[i].StartsWith(StacktraceLineInnerExceptionPrefix))
+                {
+                    _exceptions.Push(notifyEventException);
+                    notifyEventException = new(
+                        match.Groups["error"].Value, // includes type name and optional system error code
+                        match.Groups["message"].Value,
+                        type: BugsnagStacktraceType.csharp);
+                    continue;
+                }
+                else if (match.Success && i == 0)
+                {
+                    // allow values from stacktrace to replace the tag-parsed values
+                    notifyEventException.ErrorClass = match.Groups["error"].Value;
+                    notifyEventException.Message = match.Groups["message"].Value;
+                    continue;
+                }
+
+                // if the pattern did not match, fall through to check whether this is a stackframe
+            }
+
+            // on an "end of inner exception" line, output the current exception and pop the stack
+            if (stacktraceLines[i] == StacktraceLineInnerExceptionSeparator)
+            {
+                // extraneous separator without an outer exception; ignore it so we don't lose any subsequent frames
+                if (_exceptions.Count == 0)
+                    continue;
+
+                notifyEvent.Exceptions.Insert(0, notifyEventException);
+                notifyEventException = _exceptions.Pop();
                 continue;
+            }
 
-            var method = match.Groups["method"];
-            var file = match.Groups["file"];
-            var line = match.Groups["line"];
+            var stackframeMatch = StacktraceFrameRegex.Match(stacktraceLines[i]);
+            if (stackframeMatch.Success)
+            {
+                frames = true;
 
-            var stacktraceLine = new NotifyEventStacktrace(
-                file.Value,
-                line.Success ? int.Parse(line.Value) : 0,
-                method.Value);
+                var method = stackframeMatch.Groups["method"];
+                var file = stackframeMatch.Groups["file"];
+                var line = stackframeMatch.Groups["line"];
 
-            if (IsInProject(activityEvent, file.Value, method.Value))
-                stacktraceLine.InProject = true;
+                var stacktraceLine = new NotifyEventStacktrace(
+                    file.Value,
+                    line.Success ? int.Parse(line.Value) : 0,
+                    method.Value);
 
-            notifyEventException.Stacktrace.Add(stacktraceLine);
+                if (IsInProject(activityEvent, file.Value, method.Value))
+                    stacktraceLine.InProject = true;
+
+                notifyEventException.Stacktrace.Add(stacktraceLine);
+            }
+            else if (!frames)
+            {
+                // if the line is not a stack frame and we haven't seen any stack frames yet, add it to the current message
+
+                if (String.IsNullOrWhiteSpace(notifyEventException.Message))
+                    notifyEventException.Message = stacktraceLines[i];
+                else
+                    notifyEventException.Message += '\n' + stacktraceLines[i];
+            }
         }
+
+        // insert the current exception and any exceptions remaining on the stack
+        do
+        {
+            notifyEvent.Exceptions.Insert(0, notifyEventException);
+        }
+        while (_exceptions.TryPop(out notifyEventException));
     }
 
     private NotifyEventApp DetectAppFromResource()
@@ -435,16 +489,25 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
         return _options.InProjectCallback(activityEvent, file, method, inProject);
     }
 
-    private const string StacktraceRegexPattern = @"^\s+?at (?<method>.+?)( in (?<file>.+?):line (?<line>\d+))?\s*$";
+    private const string StacktraceLineInnerExceptionPrefix = " ---> ";
+    private const string StacktraceLineInnerExceptionSeparator = "   --- End of inner exception stack trace ---";
+    private const string StacktraceRegexFramePattern = @"^\s+?at (?<method>.+?)( in (?<file>.+?):line (?<line>\d+))?\s*$";
+    private const string StacktraceRegexMessagePattern = $@"^({StacktraceLineInnerExceptionPrefix})?(?<error>(?<type>.*?)(\((?<code>.*?)\))?): (?<message>.*)$";
 
     private readonly char[] StacktraceSeparators = new[] { '\r', '\n' };
 
 #if NET7_0_OR_GREATER
-    [GeneratedRegex(StacktraceRegexPattern, RegexOptions.ExplicitCapture)]
-    private static partial Regex GetStacktraceRegex();
+    [GeneratedRegex(StacktraceRegexFramePattern, RegexOptions.ExplicitCapture)]
+    private static partial Regex GetStacktraceFrameRegex();
+
+    [GeneratedRegex(StacktraceRegexMessagePattern, RegexOptions.ExplicitCapture)]
+    private static partial Regex GetStacktraceMessageRegex();
 #else
-    private static Regex GetStacktraceRegex()
-        => new Regex(StacktraceRegexPattern, RegexOptions.Compiled | RegexOptions.ExplicitCapture);
+    private static Regex GetStacktraceFrameRegex()
+        => new Regex(StacktraceRegexFramePattern, RegexOptions.Compiled | RegexOptions.ExplicitCapture);
+
+    private static Regex GetStacktraceMessageRegex()
+        => new Regex(StacktraceRegexMessagePattern, RegexOptions.Compiled | RegexOptions.ExplicitCapture);
 #endif
 
     private readonly struct SessionTracker
