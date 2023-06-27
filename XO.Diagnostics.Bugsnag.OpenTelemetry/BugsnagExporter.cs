@@ -20,7 +20,8 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
     private readonly DateTimeOffset _appStartTime;
 
     private string[]? _projectNamespacePrefixes;
-    private NotifyEvent? _notifyEventTemplate;
+    private NotifyEventApp? _notifyEventApp;
+    private NotifyEventDevice? _notifyEventDevice;
     private NotifyRequest? _notifyRequest;
     private Dictionary<string, SessionTracker>? _sessions;
     private SessionsRequest? _sessionsRequest;
@@ -46,15 +47,16 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
 
         // initialize the requests
         _projectNamespacePrefixes ??= DetectProjectNamespaces();
-        _notifyEventTemplate ??= CreateEventTemplate();
-        _notifyEventTemplate.App!.Duration = (int)(now - _appStartTime).TotalMilliseconds;
-        _notifyEventTemplate.Device!.Time = now;
+        _notifyEventApp ??= DetectAppFromResource();
+        _notifyEventApp.Duration = (int)(now - _appStartTime).TotalMilliseconds;
+        _notifyEventDevice ??= DetectDeviceFromResource();
+        _notifyEventDevice.Time = now;
         _notifyRequest ??= new(_client.Notifier);
         _sessions ??= new Dictionary<string, SessionTracker>();
         _sessionsRequest ??= new(_client.Notifier)
         {
-            App = _notifyEventTemplate.App,
-            Device = _notifyEventTemplate.Device,
+            App = _notifyEventApp,
+            Device = _notifyEventDevice,
             Sessions = new(),
         };
 
@@ -80,7 +82,11 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
                     _sessionsRequest.Sessions!.Add(session);
                 }
 
-                var notifyEvent = _notifyEventTemplate.Clone();
+                var notifyEvent = new NotifyEvent()
+                {
+                    App = _notifyEventApp,
+                    Device = _notifyEventDevice
+                };
 
                 notifyEvent.Context = activity.DisplayName;
                 notifyEvent.Session = sessionTracker.NotifyEventSession;
@@ -323,17 +329,6 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
 
             notifyEventException.Stacktrace.Add(stacktraceLine);
         }
-    }
-
-    private NotifyEvent CreateEventTemplate()
-    {
-        var @event = new NotifyEvent()
-        {
-            App = DetectAppFromResource(),
-            Device = DetectDeviceFromResource(),
-        };
-
-        return @event;
     }
 
     private NotifyEventApp DetectAppFromResource()

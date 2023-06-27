@@ -48,18 +48,6 @@ public sealed class NotifyEvent
     public NotifyEventSession? Session { get; set; }
     public List<NotifyEventFeatureFlag>? FeatureFlags { get; set; }
     public Dictionary<string, JsonObject>? MetaData { get; set; }
-
-    /// <summary>
-    /// Creates a shallow copy of the current object.
-    /// </summary>
-    /// <returns>
-    /// A new instance of <see cref="NotifyEvent"/> with the same property values as the current instance.
-    /// Reference-typed property values are shared between the two instances.
-    /// </returns>
-    public NotifyEvent Clone()
-    {
-        return (NotifyEvent)this.MemberwiseClone();
-    }
 }
 
 public sealed class NotifyEventRequest
