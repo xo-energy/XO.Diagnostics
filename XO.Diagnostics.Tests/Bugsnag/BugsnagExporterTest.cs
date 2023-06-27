@@ -217,7 +217,7 @@ public sealed class BugsnagExporterTest : BugsnagTest
             {
                 try
                 {
-                    throw new SocketException(10061);
+                    throw new ArgumentException();
                 }
                 catch (Exception ex)
                 {
@@ -233,7 +233,7 @@ public sealed class BugsnagExporterTest : BugsnagTest
                     () => Assert.Equal(typeof(InvalidOperationException).FullName, notifyEventException.ErrorClass),
                     () => Assert.Equal("bar", notifyEventException.Message)
                     ),
-                notifyEventException => Assert.Equal("System.Net.Sockets.SocketException (10061)", notifyEventException.ErrorClass)
+                notifyEventException => Assert.Equal(typeof(ArgumentException).FullName, notifyEventException.ErrorClass)
                 )
             );
     }
@@ -249,7 +249,7 @@ public sealed class BugsnagExporterTest : BugsnagTest
             activity =>
             {
                 activity.RecordException(new InvalidOperationException("bar"));
-                activity.RecordException(new SocketException(10061));
+                activity.RecordException(new ArgumentException());
             });
 
         Assert.Collection(
@@ -261,7 +261,7 @@ public sealed class BugsnagExporterTest : BugsnagTest
                 ),
             notifyEvent => Assert.Multiple(
                 () => Assert.Single(notifyEvent.Exceptions),
-                () => Assert.Equal("System.Net.Sockets.SocketException (10061)", notifyEvent.Exceptions[0].ErrorClass)
+                () => Assert.Equal(typeof(ArgumentException).FullName, notifyEvent.Exceptions[0].ErrorClass)
                 )
             );
     }
