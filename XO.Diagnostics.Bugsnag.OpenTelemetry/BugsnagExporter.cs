@@ -76,6 +76,7 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
                     var session = new Session(activity.RootId!)
                     {
                         StartedAt = new DateTimeOffset(root.StartTimeUtc, TimeSpan.Zero),
+                        User = DetectUserFromTags(activity),
                     };
 
                     var notifyEventSession = new NotifyEventSession(session.Id, session.StartedAt);
@@ -96,13 +97,12 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
                     };
 
                     notifyEvent.Context = activity.DisplayName;
+                    notifyEvent.Request = DetectRequestFromTags(activity);
                     notifyEvent.Session = sessionTracker.NotifyEventSession;
+                    notifyEvent.User = sessionTracker.Session.User;
 
                     // mark the event as unhandled if the exception is logged on the local root activity
                     notifyEvent.Unhandled = activity.Parent is null || activity.HasRemoteParent;
-
-                    // translate data from baggage and tags
-                    TranslateTraceData(activity, notifyEvent, sessionTracker.Session);
 
                     // translate events to exceptions and breadcrumbs
                     do
@@ -151,93 +151,6 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
             _notifyRequest.Events.Clear();
             _sessions.Clear();
             _sessionsRequest.Sessions?.Clear();
-        }
-    }
-
-    private void TranslateTraceData(Activity activity, NotifyEvent notifyEvent, Session? session)
-    {
-        const string RequestHeaderPrefix = "http.request.header.";
-
-        var user = new BugsnagUser();
-        var request = new NotifyEventRequest();
-
-        foreach (var (key, value) in activity.Baggage)
-        {
-            if (String.IsNullOrWhiteSpace(value)) continue;
-
-            switch (key)
-            {
-                case TraceSemanticConventions.AttributeDbUser:
-                    user.Name = value;
-                    break;
-                case TraceSemanticConventions.AttributeEnduserId:
-                    user.Id = value;
-                    break;
-                case TraceSemanticConventions.AttributeEnduserRole when user.Name == null:
-                    user.Name = value;
-                    break;
-            }
-        }
-
-        foreach (var (key, value) in activity.EnumerateTagObjects())
-        {
-            if (value is string valueString)
-            {
-                switch (key)
-                {
-                    case TraceSemanticConventions.AttributeDbUser:
-                        user.Name = valueString;
-                        break;
-                    case TraceSemanticConventions.AttributeEnduserId:
-                        user.Id = valueString;
-                        break;
-                    case TraceSemanticConventions.AttributeEnduserRole when user.Name == null:
-                        user.Name = valueString;
-                        break;
-                    case TraceSemanticConventions.AttributeHttpClientIp:
-                        request.ClientIp = valueString;
-                        break;
-                    case TraceSemanticConventions.AttributeHttpMethod:
-                        request.HttpMethod = valueString;
-                        break;
-                    case TraceSemanticConventions.AttributeHttpUrl:
-                        request.Url = valueString;
-                        break;
-                }
-            }
-            else if (value is string[] valueStringArray && valueStringArray.Length > 0)
-            {
-                switch (key)
-                {
-                    case var _ when key.StartsWith(RequestHeaderPrefix):
-                        var header = key.Substring(RequestHeaderPrefix.Length).Replace('_', '-');
-                        var headerValue = String.Join(", ", valueStringArray);
-
-                        request.Headers ??= new();
-                        request.Headers[header] = headerValue;
-
-                        if (header.Equals("referer", StringComparison.OrdinalIgnoreCase))
-                            request.Referer = headerValue;
-
-                        break;
-                }
-            }
-        }
-
-        if (user.Id != null ||
-            user.Name != null ||
-            user.Email != null)
-        {
-            notifyEvent.User = user;
-            if (session != null) session.User = user;
-        }
-
-        if (request.ClientIp != null ||
-            request.HttpMethod != null ||
-            request.Url != null ||
-            request.Headers != null)
-        {
-            notifyEvent.Request = request;
         }
     }
 
@@ -458,6 +371,110 @@ internal sealed partial class BugsnagExporter : BaseExporter<Activity>
         }
 
         return device;
+    }
+
+    private NotifyEventRequest? DetectRequestFromTags(Activity activity)
+    {
+        const string RequestHeaderPrefix = "http.request.header.";
+
+        var request = new NotifyEventRequest();
+
+        foreach (var (key, value) in activity.EnumerateTagObjects())
+        {
+            if (value is string valueString)
+            {
+                switch (key)
+                {
+                    case TraceSemanticConventions.AttributeHttpClientIp:
+                        request.ClientIp = valueString;
+                        break;
+                    case TraceSemanticConventions.AttributeHttpMethod:
+                        request.HttpMethod = valueString;
+                        break;
+                    case TraceSemanticConventions.AttributeHttpUrl:
+                        request.Url = valueString;
+                        break;
+                }
+            }
+            else if (value is string[] valueStringArray && valueStringArray.Length > 0)
+            {
+                switch (key)
+                {
+                    case var _ when key.StartsWith(RequestHeaderPrefix):
+                        var header = key.Substring(RequestHeaderPrefix.Length).Replace('_', '-');
+                        var headerValue = String.Join(", ", valueStringArray);
+
+                        request.Headers ??= new();
+                        request.Headers[header] = headerValue;
+
+                        if (header.Equals("referer", StringComparison.OrdinalIgnoreCase))
+                            request.Referer = headerValue;
+
+                        break;
+                }
+            }
+        }
+
+        if (request.ClientIp != null ||
+            request.HttpMethod != null ||
+            request.Url != null ||
+            request.Headers != null)
+        {
+            return request;
+        }
+
+        return null;
+    }
+
+    private BugsnagUser? DetectUserFromTags(Activity activity)
+    {
+        var user = new BugsnagUser();
+
+        foreach (var (key, value) in activity.Baggage)
+        {
+            if (String.IsNullOrWhiteSpace(value)) continue;
+
+            switch (key)
+            {
+                case TraceSemanticConventions.AttributeDbUser:
+                    user.Name = value;
+                    break;
+                case TraceSemanticConventions.AttributeEnduserId:
+                    user.Id = value;
+                    break;
+                case TraceSemanticConventions.AttributeEnduserRole when user.Name == null:
+                    user.Name = value;
+                    break;
+            }
+        }
+
+        foreach (var (key, value) in activity.EnumerateTagObjects())
+        {
+            if (value is string valueString)
+            {
+                switch (key)
+                {
+                    case TraceSemanticConventions.AttributeDbUser:
+                        user.Name = valueString;
+                        break;
+                    case TraceSemanticConventions.AttributeEnduserId:
+                        user.Id = valueString;
+                        break;
+                    case TraceSemanticConventions.AttributeEnduserRole when user.Name == null:
+                        user.Name = valueString;
+                        break;
+                }
+            }
+        }
+
+        if (user.Email != null ||
+            user.Id != null ||
+            user.Name != null)
+        {
+            return user;
+        }
+
+        return null;
     }
 
     private string[] DetectProjectNamespaces()
