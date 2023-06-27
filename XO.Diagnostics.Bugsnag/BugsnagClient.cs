@@ -179,14 +179,14 @@ public sealed class BugsnagClient
                 options: _jsonSerializerOptions,
                 cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
-
-            if (!response.IsSuccessStatusCode)
-                throw new BugsnagRequestException(statusResponse, statusCode: response.StatusCode);
         }
         catch (Exception ex)
         {
             throw new BugsnagRequestException(inner: ex, statusCode: response.StatusCode);
         }
+
+        if (!response.IsSuccessStatusCode)
+            throw new BugsnagRequestException(statusResponse, statusCode: response.StatusCode);
 
         return statusResponse!;
     }
