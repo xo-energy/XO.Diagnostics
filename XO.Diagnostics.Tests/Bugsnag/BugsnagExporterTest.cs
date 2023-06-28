@@ -341,6 +341,30 @@ public sealed class BugsnagExporterTest : BugsnagTest
             () => Assert.Empty(_notifyEvents));
     }
 
+    [Fact]
+    public async Task Export_TrimsPaths()
+    {
+        ExporterOptions.Value.ProjectNamespaces = new[] {
+            this.GetType().Namespace!,
+        };
+        ExporterOptions.Value.TrimPathPrefixes = new[] {
+            "/_/",
+            ThisAssembly.SourceRoot,
+        };
+
+        using var host = await StartHostAsync();
+        using var tracerProvider = CreateTracerProvider(host);
+
+        _ = CreateActivity("foo", _ => throw new InvalidOperationException());
+
+        var notifyEvent = Assert.Single(_notifyEvents);
+        var notifyEventException = Assert.Single(notifyEvent.Exceptions);
+
+        Assert.Contains(
+            notifyEventException.Stacktrace,
+            stacktraceLine => stacktraceLine.InProject == true && stacktraceLine.File.StartsWith("XO.Diagnostics.Tests"));
+    }
+
     private static Activity CreateActivity(string name, Action<Activity>? configure = null)
     {
         var activity = Source.StartActivity(name);

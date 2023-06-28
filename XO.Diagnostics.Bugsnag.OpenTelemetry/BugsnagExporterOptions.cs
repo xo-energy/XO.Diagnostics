@@ -8,4 +8,6 @@ public sealed class BugsnagExporterOptions
         = static (_, _, _, inProjectNamespace) => inProjectNamespace;
 
     public string[]? ProjectNamespaces { get; set; }
+
+    public string[] TrimPathPrefixes { get; set; } = Array.Empty<string>();
 }

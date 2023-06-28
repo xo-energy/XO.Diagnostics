@@ -277,6 +277,19 @@ public sealed partial class BugsnagExporter : BaseExporter<Activity>
                 if (IsInProject(activityEvent, file.Value, method.Value))
                     stacktraceLine.InProject = true;
 
+                // trim file paths for in-project lines
+                if (stacktraceLine.InProject == true && file.Success)
+                {
+                    foreach (var prefix in _options.TrimPathPrefixes)
+                    {
+                        if (stacktraceLine.File.StartsWith(prefix))
+                        {
+                            stacktraceLine.File = file.Value.Substring(prefix.Length);
+                            break;
+                        }
+                    }
+                }
+
                 notifyEventException.Stacktrace.Add(stacktraceLine);
             }
             else if (!frames)

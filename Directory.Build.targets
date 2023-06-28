@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <Target Name="AddNuGetPackageVersionToThisAssembly" DependsOnTargets="GetBuildVersion;InitializeSourceControlInformationFromSourceControlManager" BeforeTargets="GenerateAssemblyNBGVVersionInfo">
+    <ItemGroup>
+      <AdditionalThisAssemblyFields Include="NuGetPackageVersion" String="$(NuGetPackageVersion)" />
+      <AdditionalThisAssemblyFields Include="SourceRoot" String="@(SourceRoot->Replace('\', '\\'))" Condition=" '%(SourceRoot.SourceControl)' == 'git' " />
+    </ItemGroup>
+  </Target>
+
+</Project>
