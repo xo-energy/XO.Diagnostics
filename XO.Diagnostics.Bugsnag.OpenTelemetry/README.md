@@ -1,5 +1,9 @@
 # XO.Diagnostics.Bugsnag.OpenTelemetry
 
+[![NuGet](https://img.shields.io/nuget/v/XO.Diagnostics.Bugsnag.OpenTelemetry)](https://www.nuget.org/packages/XO.Diagnostics.Bugsnag.OpenTelemetry)
+[![GitHub Actions Status](https://img.shields.io/github/actions/workflow/status/xo-energy/XO.Diagnostics/ci.yml?branch=main&logo=github)](https://github.com/xo-energy/XO.Diagnostics/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/xo-energy/XO.Diagnostics/branch/main/XO.Diagnostics.Bugsnag.OpenTelemetry/graph/badge.svg?token=AbiIYmAaeS)](https://codecov.io/gh/xo-energy/XO.Diagnostics)
+
 Exports OpenTelemetry traces to [BugSnag](https://www.bugsnag.com/).
 
 ## Usage

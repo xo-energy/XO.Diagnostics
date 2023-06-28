@@ -1,4 +1,8 @@
-# XO.Diagnostics.BugSnag
+# XO.Diagnostics.Bugsnag
+
+[![NuGet](https://img.shields.io/nuget/v/XO.Diagnostics.Bugsnag)](https://www.nuget.org/packages/XO.Diagnostics.Bugsnag)
+[![GitHub Actions Status](https://img.shields.io/github/actions/workflow/status/xo-energy/XO.Diagnostics/ci.yml?branch=main&logo=github)](https://github.com/xo-energy/XO.Diagnostics/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/xo-energy/XO.Diagnostics/branch/main/XO.Diagnostics.Bugsnag/graph/badge.svg?token=AbiIYmAaeS)](https://codecov.io/gh/xo-energy/XO.Diagnostics)
 
 A simple HTTP client library for the [BugSnag](https://www.bugsnag.com/) API. For a more complete solution, see [XO.Diagnostics.Bugsnag.OpenTelemetry](../XO.Diagnostics.Bugsnag.OpenTelemetry).
 
