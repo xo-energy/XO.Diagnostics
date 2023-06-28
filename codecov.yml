@@ -1,0 +1,11 @@
+component_management:
+  individual_components:
+    - component_id: "XO.Diagnostics.Bugsnag"
+      paths:
+        - "XO.Diagnostics.Bugsnag/"
+    - component_id: "XO.Diagnostics.Bugsnag.OpenTelemetry"
+      paths:
+        - "XO.Diagnostics.Bugsnag.OpenTelemetry/"
+
+comment:
+  layout: "header, diff, flags, components"  # show component info in the PR comment
