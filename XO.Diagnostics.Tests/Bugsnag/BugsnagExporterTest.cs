@@ -349,7 +349,7 @@ public sealed class BugsnagExporterTest : BugsnagTest
         };
         ExporterOptions.Value.TrimPathPrefixes = new[] {
             "/_/",
-            ThisAssembly.SourceRoot,
+            ThisAssembly.RepositoryRoot,
         };
 
         using var host = await StartHostAsync();

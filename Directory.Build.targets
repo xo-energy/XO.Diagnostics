@@ -4,7 +4,7 @@
   <Target Name="AddNuGetPackageVersionToThisAssembly" DependsOnTargets="GetBuildVersion;InitializeSourceControlInformationFromSourceControlManager" BeforeTargets="GenerateAssemblyNBGVVersionInfo">
     <ItemGroup>
       <AdditionalThisAssemblyFields Include="NuGetPackageVersion" String="$(NuGetPackageVersion)" />
-      <AdditionalThisAssemblyFields Include="SourceRoot" String="@(SourceRoot->Replace('\', '\\'))" Condition=" '%(SourceRoot.SourceControl)' == 'git' " />
+      <AdditionalThisAssemblyFields Include="RepositoryRoot" String="$(RepositoryRoot.Replace('\', '\\'))" />
     </ItemGroup>
   </Target>
 
